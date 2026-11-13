@@ -265,5 +265,40 @@ ok(!str_contains($src, 'goride_dispatch') && !str_contains($src, 'FCMService') &
 ok(!preg_match('/dbDelta|CREATE TABLE|\$wpdb->(insert|update|delete|query)/', $src), 'no crea tablas ni escribe con $wpdb');
 ok(!str_contains($src, 'wp_create_nonce') && !preg_match('/get_param\([\'"]token[\'"]\)/', $src), 'no acepta token de reserva del cliente como credencial');
 
+echo "\n== Moneda de CHBS en llamadas REST (ChbsGatewayLive) ==\n";
+// Réplica fiel de CHBSCurrency::getFormCurrency()/getExchangeRate() del CHBS real (leídas del plugin del usuario).
+if (!class_exists('CHBSCurrency')) {
+    class CHBSCurrency
+    {
+        public static function getBaseCurrency() { return 'USD'; }
+        public static function getFormCurrency() { return array_key_exists('currency', $_GET) ? $_GET['currency'] : null; }
+        public static function getExchangeRate() { return self::getBaseCurrency() != self::getFormCurrency() ? 0 : 1; }
+    }
+    class CHBSPrice { public static function format($v, $c) { return '$' . number_format((float) $v, 2); } }
+    class CHBSBooking
+    {
+        public function calculatePrice($data, $a, $b, $c)
+        {
+            $g = 30.14 * CHBSCurrency::getExchangeRate();
+            return ['total' => ['sum' => ['gross' => ['value' => $g, 'format' => (string) $g], 'net' => ['value' => $g, 'format' => (string) $g]]]];
+        }
+        public function sendBooking($data, $form) { return CHBSCurrency::getExchangeRate() > 0 ? 555 : false; }
+        public function createBilling($id) { return ['summary' => ['value_gross' => 30.14 * CHBSCurrency::getExchangeRate()]]; }
+    }
+}
+unset($_GET['currency']);
+ok((new CHBSBooking())->calculatePrice([], null, false, true)['total']['sum']['gross']['value'] == 0, 'sin moneda en el contexto CHBS da precio 0 (reproduce el fallo real)');
+$live = new GoRideRider\Services\ChbsGatewayLive();
+$p = $live->price(['meta' => []], []);
+ok($p['gross'] > 30.0 && $p['currency'] === 'USD', 'con el contexto de moneda el precio de CHBS sale correcto [' . $p['gross'] . ' ' . $p['currency'] . ']');
+ok(!array_key_exists('currency', $_GET), 'se restaura $_GET (no deja la moneda puesta)');
+$_GET['currency'] = 'EUR';
+$live->price(['meta' => []], []);
+ok($_GET['currency'] === 'EUR', 'si ya había moneda en $_GET se restaura el valor original');
+unset($_GET['currency']);
+ok($live->create(['meta' => []], [], 1) === 555, 'crear la reserva también usa la moneda base');
+ok(abs($live->bookingTotal(5) - 30.14) < 0.001, 'el total de la reserva también usa la moneda base');
+ok(!array_key_exists('currency', $_GET), 'tras crear/leer total tampoco queda moneda en $_GET');
+
 echo "\n$pass pruebas correctas, $fail fallidas\n";
 exit($fail === 0 ? 0 : 1);

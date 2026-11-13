@@ -144,7 +144,39 @@ final class ChbsGatewayLive implements ChbsGateway
         return $out;
     }
 
+    /**
+     * CHBS toma la moneda del formulario de $_GET['currency'] / $_POST (CHBSCurrency::getFormCurrency()).
+     * En una llamada REST no existe esa página, la moneda queda vacía, el tipo de cambio vale 0 y
+     * TODO precio sale 0 (confirmado en el debug.log real: "Undefined array key ''" en CHBS.Currency).
+     * Se fija la moneda base de CHBS solo durante la llamada y se restaura después.
+     *
+     * @template T
+     * @param callable():T $fn
+     * @return T
+     */
+    private function withCurrencyContext(callable $fn)
+    {
+        $had = array_key_exists('currency', $_GET);
+        $previous = $had ? $_GET['currency'] : null;
+        $base = class_exists('CHBSCurrency') ? (string) \CHBSCurrency::getBaseCurrency() : '';
+        $_GET['currency'] = $base !== '' ? $base : 'USD';
+        try {
+            return $fn();
+        } finally {
+            if ($had) {
+                $_GET['currency'] = $previous;
+            } else {
+                unset($_GET['currency']);
+            }
+        }
+    }
+
     public function price(array $form, array $data): array
+    {
+        return $this->withCurrencyContext(fn(): array => $this->priceInContext($form, $data));
+    }
+
+    private function priceInContext(array $form, array $data): array
     {
         if (!class_exists('CHBSBooking')) {
             throw new RiderException('QUOTE_UNAVAILABLE');
@@ -175,6 +207,11 @@ final class ChbsGatewayLive implements ChbsGateway
 
     public function create(array $form, array $data, int $userId): int|false
     {
+        return $this->withCurrencyContext(fn(): int|false => $this->createInContext($form, $data, $userId));
+    }
+
+    private function createInContext(array $form, array $data, int $userId): int|false
+    {
         if (!class_exists('CHBSBooking')) {
             return false;
         }
@@ -194,6 +231,11 @@ final class ChbsGatewayLive implements ChbsGateway
     }
 
     public function bookingTotal(int $bookingId): ?float
+    {
+        return $this->withCurrencyContext(fn(): ?float => $this->bookingTotalInContext($bookingId));
+    }
+
+    private function bookingTotalInContext(int $bookingId): ?float
     {
         if (!class_exists('CHBSBooking')) {
             return null;
