@@ -1,0 +1,144 @@
+== TripState
+  ok   running => searching
+  ok   no_drivers
+  ok   dispatch_failed => no_drivers
+  ok   no_drivers_in_radius es transitorio => searching
+  ok   búsqueda vencida (30 min) => no_drivers (solo lectura)
+  ok   accepted gana sobre antigüedad
+  ok   arrived
+  ok   finished
+  ok   cancelled
+  ok   offer cancelada prevalece
+  ok   cancelables
+  ok   no_drivers no bloquea nuevo pedido
+== QuoteToken
+  ok   verifica
+  ok   otro usuario [QUOTE_INVALID]
+  ok   vencido [QUOTE_EXPIRED]
+  ok   payload alterado (precio) [QUOTE_INVALID]
+  ok   otra llave [QUOTE_INVALID]
+  ok   malformado [QUOTE_INVALID]
+== Geo
+  ok   rangos
+  ok   punto inválido [VALIDATION_ERROR]
+  ok   sanea dirección y país
+  ok   haversine Newark-NYC ~14 km
+== ZoneGuard
+  ok   US permitido
+  ok   país no permitido (geocodificado en servidor) [ZONE_NOT_ALLOWED]
+  ok   país no verificable => falla cerrado [ZONE_UNVERIFIABLE]
+  ok   el país declarado por el cliente se ignora [ZONE_NOT_ALLOWED]
+  ok   dentro del radio
+  ok   fuera del radio [ZONE_NOT_ALLOWED]
+  ok   relación OR
+  ok   restricción desactivada = permitido
+== QuoteService
+  ok   cotiza con precio del servidor
+  ok   cotizar NO crea reserva
+  ok   precio/distancia enviados por el cliente se ignoran
+  ok   mismo punto [SAME_LOCATION]
+  ok   programado no soportado en MVP [VALIDATION_ERROR]
+  ok   pasajeros 0 [VALIDATION_ERROR]
+  ok   pasajeros > máximo [VALIDATION_ERROR]
+  ok   pasajeros decimal [VALIDATION_ERROR]
+  ok   sin puntos [VALIDATION_ERROR]
+  ok   destino absurdamente lejos [VALIDATION_ERROR]
+  ok   efectivo incompatible: se informa, no se cambia config [PAYMENT_NOT_COMPATIBLE]
+  ok   vehículo no resoluble [QUOTE_UNAVAILABLE]
+  ok   precio 0 rechazado [QUOTE_UNAVAILABLE]
+  ok   formulario con ubicaciones fijas no soportado [QUOTE_UNAVAILABLE]
+  ok   zona fuera [ZONE_NOT_ALLOWED]
+== BookingService
+  ok   crea la reserva
+  ok   reserva vinculada al usuario (_goride_user_id)
+  ok   marcada como rider_app
+  ok   efectivo + contacto del perfil (no del cliente)
+  ok   fecha en formato estándar CHBS d-m-Y
+  ok   precio guardado coincide con la cotización
+  ok   la respuesta no contiene tokens
+  ok   doble toque / reintento: misma reserva, 1 sola creación
+  ok   candados liberados tras éxito
+  ok   segundo pedido con viaje activo [ACTIVE_TRIP_EXISTS]
+  ok   no se creó segunda reserva
+  ok   solicitud simultánea [REQUEST_IN_PROGRESS]
+  ok   simultánea no crea reserva
+  ok   candado huérfano antiguo se libera solo
+  ok   sin clave de idempotencia [IDEMPOTENCY_REQUIRED]
+  ok   clave inválida [VALIDATION_ERROR]
+  ok   cotización de otro usuario [QUOTE_INVALID]
+  ok   cotización falsa [QUOTE_INVALID]
+  ok   cotización vencida [QUOTE_EXPIRED]
+  ok   tarifa cambió: PRICE_CHANGED con nuevo precio y sin crear
+  ok   pago ya no compatible [PAYMENT_NOT_COMPATIBLE]
+  ok   zona cambió [ZONE_NOT_ALLOWED]
+  ok   sin teléfono en el perfil [VALIDATION_ERROR]
+  ok   CHBS falla: no se simula éxito [BOOKING_CREATION_FAILED]
+  ok   tras fallo: candados liberados y sin reservas
+  ok   reintento tras fallo crea una reserva
+  ok   la clave de idempotencia está aislada por usuario
+== TripReader
+  ok   reserva sin _goride_user_id NO es de nadie (no se confía en email)
+  ok   propiedad estricta
+  ok   conductor asignado con nombre y foto
+  ok   privacidad: no expone teléfono ni email del conductor
+  ok   ubicación del conductor con antigüedad
+  ok   datos de ruta y can_cancel
+  ok   recupera viaje activo
+  ok   otro usuario no ve viajes ajenos
+  ok   finalizado: conserva conductor (chbs_driver_id) y no ofrece ubicación
+  ok   finalizado ya no es viaje activo
+  ok   sin conductores reciente se recupera para mostrar resultado
+  ok   sin conductores antiguo no se recupera
+== CancelService
+  ok   otro usuario: 404 (no revela existencia) [TRIP_NOT_FOUND]
+  ok   reserva inexistente [TRIP_NOT_FOUND]
+  ok   cancela vía ruta existente
+  ok   usa token de cliente interno del servidor
+  ok   doble toque: idempotente, no repite la cancelación
+  ok   viaje finalizado no se cancela [TRIP_NOT_CANCELABLE]
+  ok   no invocó la cancelación
+  ok   cancela con conductor en el punto
+  ok   si la cancelación existente falla se informa [CANCEL_FAILED]
+== RiderController (HTTP)
+  ok   sin token => 401
+  ok   token inválido => 401
+  ok   cotización 200 con sobre estándar
+  ok   sin caché
+  ok   salida PHP impresa por código legado de CHBS no rompe la respuesta
+  ok   reserva => 201
+  ok   reintento => 200 replayed
+  ok   acepta cabecera Idempotency-Key
+  ok   GET trip del dueño
+  ok   GET trip de otro => 404
+  ok   chat-token a no dueño: 404 sin token
+  ok   chat-token al dueño
+  ok   active recupera
+  ok   active de otro usuario: null
+  ok   driver: null mientras se busca
+  ok   cancelar
+  ok   cancelar de nuevo: idempotente
+  ok   config lista
+  ok   config informa pago incompatible
+[GORIDE-RIDER] RuntimeException: SECRET db password=xyz @run_tests.php:227
+  ok   error interno: 500 sin filtrar detalles
+  ok   límite de 20 cotizaciones / 10 min
+== PlacesService
+  ok   autocomplete filtra sin place_id
+  ok   llave solo en la URL del servidor
+  ok   consulta demasiado corta [VALIDATION_ERROR]
+  ok   estado de Google inválido => 503 [PLACES_UNAVAILABLE]
+  ok   details con zip y país
+  ok   place_id inválido [VALIDATION_ERROR]
+  ok   sin llave => 503 [PLACES_UNAVAILABLE]
+  ok   reverse conserva coordenadas pedidas
+  ok   reverse con lat inválida [VALIDATION_ERROR]
+== Registro de rutas y aislamiento
+  ok   11 rutas registradas
+  ok   solo namespace goride-rider/v1 (no toca goride/v1 ni goride/v2)
+  ok   el plugin nunca escribe estado de viaje, asignación ni token de conductor
+  ok   no registra rutas en namespaces existentes
+  ok   no toca despacho ni FCM de conductores
+  ok   no crea tablas ni escribe con $wpdb
+  ok   no acepta token de reserva del cliente como credencial
+
+130 pruebas correctas, 0 fallidas

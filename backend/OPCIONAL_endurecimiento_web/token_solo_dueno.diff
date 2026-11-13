@@ -1,0 +1,14 @@
+--- goride-live/goride-live.php (producción actual)	2026-10-23 09:10:27.241428608 -0500
++++ goride-live/goride-live.php (con endurecimiento)	2026-10-23 09:17:59.183815112 -0500
+@@ -1304,6 +1304,11 @@
+   }
+ 
+   if ($booking_id && !$token) {
++    // ENDURECIMIENTO (opcional): el token solo se entrega al dueño de la reserva.
++    $goride_uid = is_user_logged_in() ? get_current_user_id() : 0;
++    if ($goride_uid <= 0 || (int) goride_get_booking_user_id($booking_id) !== $goride_uid) {
++      return '<p style="padding:20px;">Acceso inválido. Inicia sesión con la cuenta que pidió el viaje.</p>';
++    }
+     $token_new = goride_get_or_create_token($booking_id, "client");
+     wp_safe_redirect(home_url("/ride-live/?booking_id=".$booking_id."&token=".$token_new));
+     exit;
