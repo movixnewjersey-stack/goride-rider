@@ -157,6 +157,14 @@ final class ChbsGatewayLive implements ChbsGateway
         }
         $currency = class_exists('CHBSCurrency') ? (string) \CHBSCurrency::getFormCurrency() : 'USD';
         $gross = (float) $price['total']['sum']['gross']['value'];
+        if ($gross <= 0) {
+            // Diagnóstico (solo lectura): qué devolvió CHBS cuando el precio es 0. Sin datos personales.
+            error_log('[GORIDE-RIDER] zero_price pickup=' . ($data['pickup_date_service_type_1'] ?? '?') . ' ' . ($data['pickup_time_service_type_1'] ?? '?')
+                . ' vehicle=' . ($data['vehicle_id'] ?? '?') . ' dist=' . ($data['distance_sum'] ?? '?') . ' dur=' . ($data['duration_sum'] ?? '?')
+                . ' adults=' . ($data['passenger_adult_service_type_1'] ?? '?') . ' children=' . ($data['passenger_children_service_type_1'] ?? '?')
+                . ' tz=' . (function_exists('wp_timezone_string') ? wp_timezone_string() : '?')
+                . ' price=' . substr((string) wp_json_encode($price['total'] ?? $price), 0, 1500));
+        }
         $net = (float) ($price['total']['sum']['net']['value'] ?? $gross);
         $formatted = class_exists('CHBSPrice')
             ? html_entity_decode(wp_strip_all_tags((string) \CHBSPrice::format($gross, $currency)))
