@@ -6,7 +6,15 @@ $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GoRideTest'
 
 function Show-Err($e) {
     Write-Host "  ERROR: $($e.Exception.Message)" -ForegroundColor Red
-    if ($e.ErrorDetails -and $e.ErrorDetails.Message) { Write-Host "  $($e.ErrorDetails.Message)" -ForegroundColor Red }
+    if ($e.ErrorDetails -and $e.ErrorDetails.Message) { Write-Host "  $($e.ErrorDetails.Message)" -ForegroundColor Red; return }
+    try {
+        $resp = $e.Exception.Response
+        if ($resp) {
+            $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
+            $text = $reader.ReadToEnd()
+            if ($text) { Write-Host "  Respuesta del servidor: $text" -ForegroundColor Red }
+        }
+    } catch {}
 }
 
 $email = Read-Host 'Correo de la cuenta de pasajero'
