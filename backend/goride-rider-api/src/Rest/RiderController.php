@@ -10,6 +10,7 @@ use GoRideRider\Services\ChbsGateway;
 use GoRideRider\Services\PlacesService;
 use GoRideRider\Services\QuoteService;
 use GoRideRider\Services\RiderAuth;
+use GoRideRider\Services\RiderPush;
 use GoRideRider\Services\Settings;
 use GoRideRider\Services\TripReader;
 use GoRideRider\Support\RiderException;
@@ -26,7 +27,8 @@ final class RiderController
         private readonly TripReader $reader,
         private readonly ChbsGateway $chbs,
         private readonly Settings $settings,
-        private readonly ?PlacesService $places = null
+        private readonly ?PlacesService $places = null,
+        private readonly ?RiderPush $push = null
     ) {
     }
 
@@ -46,6 +48,8 @@ final class RiderController
             ['/trips/(?P<id>\d+)/driver', 'GET', 'driver', $id],
             ['/trips/(?P<id>\d+)/chat-token', 'GET', 'chatToken', $id],
             ['/trips/(?P<id>\d+)/cancel', 'POST', 'cancel', $id],
+            ['/push/token', 'POST', 'pushToken', []],
+            ['/push/token/clear', 'POST', 'pushClear', []],
         ];
         foreach ($routes as [$path, $method, $fn, $args]) {
             register_rest_route($ns, $path, [
@@ -218,6 +222,27 @@ final class RiderController
         $res = $this->cancels->cancel($userId, (int) $r['id']);
 
         return ['data' => ['trip' => $res['trip'], 'already_cancelled' => $res['already_cancelled']], '_message' => 'Viaje cancelado'];
+    }
+
+    /** @return array<string,mixed> */
+    private function doPushToken(int $userId, \WP_REST_Request $r): array
+    {
+        $this->rateLimit($userId, 'pt', 30, 600);
+        $b = $this->body($r);
+        if ($this->push === null) {
+            throw new RiderException('INTERNAL_ERROR');
+        }
+        $this->push->saveToken($userId, (string) ($b['token'] ?? ''), (string) ($b['lang'] ?? ''));
+
+        return ['data' => ['registered' => true]];
+    }
+
+    /** @return array<string,mixed> */
+    private function doPushClear(int $userId, \WP_REST_Request $r): array
+    {
+        $this->push?->clearToken($userId);
+
+        return ['data' => ['registered' => false]];
     }
 
     /** @return array<string,mixed> */

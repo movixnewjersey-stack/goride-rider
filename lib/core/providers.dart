@@ -4,8 +4,13 @@ import '../features/auth/data/auth_repository.dart';
 import '../features/chat/data/chat_repository.dart';
 import '../features/places/data/places_repository.dart';
 import '../features/trip/data/trip_repository.dart';
+import 'dart:ui' as ui;
+
+import '../features/trip/application/trip_providers.dart';
 import 'api/api_client.dart';
 import 'location/location_service.dart';
+import 'push/push_gateway.dart';
+import 'push/push_service.dart';
 import 'session/session_controller.dart';
 import 'storage/session_storage.dart';
 
@@ -32,3 +37,17 @@ final placesRepositoryProvider =
 final chatRepositoryProvider = Provider<ChatRepository>((ref) => HttpChatRepository());
 
 final locationServiceProvider = Provider<LocationService>((ref) => GeolocatorLocationService());
+
+final pushGatewayProvider = Provider<PushGateway>((ref) => FirebasePushGateway());
+
+final pushServiceProvider = Provider<PushService>((ref) {
+  final service = PushService(
+    gateway: ref.watch(pushGatewayProvider),
+    api: ref.watch(apiClientProvider),
+    language: () => ui.PlatformDispatcher.instance.locale.languageCode,
+    // Con la app abierta, un aviso del servidor adelanta la consulta del viaje.
+    onForegroundMessage: () => ref.read(activeTripControllerProvider.notifier).recover(),
+  );
+  ref.onDispose(() => service.stop());
+  return service;
+});

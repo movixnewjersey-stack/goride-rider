@@ -54,9 +54,17 @@ Control de seguridad (debe dar 401): llamar `/config` sin cabecera `Authorizatio
 
 ## 5. Reversa
 1. Plugins › **Desactivar** «GoRide Rider API» (las rutas desaparecen al instante) y, si quieres, Eliminar.
-2. No hay tablas ni opciones permanentes. Reservas ya creadas por la app conservan sus metas (`_goride_user_id`…): son inofensivas.
+2. No hay tablas ni opciones permanentes. Solo quedan metas inofensivas: `goride_rider_fcm_token` / `goride_rider_lang` (usuario) y `_goride_rider_push_*` (reserva). Reservas ya creadas por la app conservan sus metas (`_goride_user_id`…): son inofensivas.
 3. Candados huérfanos (si hubo un corte): `DELETE FROM wp_options WHERE option_name LIKE 'goride\_rider\_lk\_%' OR option_name LIKE 'goride\_rider\_uk\_%';` (solo si el servicio estuvo desactivado).
 
 ## 6. Pruebas aisladas incluidas (sin WordPress, sin red, sin base de datos)
-`php tests/run_tests.php` → **121 pruebas correctas, 0 fallidas** (PHP 8.3 del entorno de desarrollo; producción usa 8.4 — recomendado repetir `php -l` allí). Incluyen: estados, firma de cotización (alterada/otro usuario/vencida), zona, precio no editable por el cliente, doble toque, solicitudes simultáneas, candados huérfanos, reintento tras fallo de CHBS, propiedad estricta, privacidad del conductor, cancelación fuera de estado, límite de frecuencia, salida PHP impresa por CHBS, y aislamiento (el plugin no escribe estado de viaje, no usa namespaces existentes, no toca despacho/FCM/tablas). Mutaciones comprobadas: quitar propiedad, recálculo de precio, estado cancelable o fallo cerrado de zona hace fallar pruebas.
+`php tests/run_tests.php` → **156 pruebas correctas, 0 fallidas** (PHP 8.3 del entorno de desarrollo; producción usa 8.4 — recomendado repetir `php -l` allí). Incluyen: estados, firma de cotización (alterada/otro usuario/vencida), zona, precio no editable por el cliente, doble toque, solicitudes simultáneas, candados huérfanos, reintento tras fallo de CHBS, propiedad estricta, privacidad del conductor, cancelación fuera de estado, límite de frecuencia, salida PHP impresa por CHBS, y aislamiento (el plugin no escribe estado de viaje, no usa namespaces existentes, no toca despacho/FCM/tablas). Mutaciones comprobadas: quitar propiedad, recálculo de precio, estado cancelable o fallo cerrado de zona hace fallar pruebas.
 **Lo que estas pruebas NO prueban:** `ChbsGatewayLive` (cálculo de ruta/precio y `sendBooking()` reales de CHBS, `AuthMiddleware` real, `rest_do_request` real). Eso solo se valida en tu servidor con los pasos 3 y 4.
+
+## 7. Avisos push al pasajero (v1.1 del plugin)
+Cambios en el servidor (todos aditivos; respalda antes cada archivo):
+1. `wp-content/plugins/goride-api/Services/FCMService.php`: `send()` y `buildMessage()` ganan un 4.º parámetro opcional (`$androidAlert`). Sin él, el conductor recibe EXACTAMENTE lo mismo que antes (hay prueba).
+2. `wp-content/plugins/goride-live/goride-live.php`: se añade en `POST /chat` una línea `do_action('goride_chat_message_inserted', ...)` (y se usa el id guardado en vez de `$wpdb->insert_id`). Sin otro cambio.
+3. Plugin `goride-rider-api` actualizado (nuevo `Services/RiderPush.php`, rutas `POST /push/token` y `POST /push/token/clear`).
+Orden recomendado: 1, 2 y luego 3. Si algo falla, restaurar los respaldos: la app sigue funcionando, solo sin avisos.
+Eventos que avisan: conductor aceptó (`_goride_live_status=accepted`), llegó (`arrived_at_pickup`), viaje finalizado (`finished`) y mensaje del conductor (`sender=driver`).

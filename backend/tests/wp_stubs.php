@@ -104,3 +104,16 @@ function rest_do_request($req)
     }
     return new WP_REST_Response(['ok' => false, 'error' => 'bad_token'], 403);
 }
+
+function get_post_type($id) { return 'chbs_booking'; }
+function update_user_meta($id, $k, $v) { $GLOBALS['__users'][$id]['meta'][$k] = $v; return true; }
+function delete_user_meta($id, $k) { unset($GLOBALS['__users'][$id]['meta'][$k]); return true; }
+function get_users(array $a): array
+{
+    $out = [];
+    foreach ($GLOBALS['__users'] ?? [] as $id => $u) {
+        if (in_array($id, (array) ($a['exclude'] ?? []), true)) { continue; }
+        if (($u['meta'][$a['meta_key']] ?? null) === $a['meta_value']) { $out[] = $id; }
+    }
+    return $out;
+}

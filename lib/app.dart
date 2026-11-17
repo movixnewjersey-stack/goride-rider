@@ -51,9 +51,11 @@ class _GoRideAppState extends ConsumerState<GoRideApp> with WidgetsBindingObserv
       final trips = ref.read(activeTripControllerProvider.notifier);
       if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
         trips.recover();
+        ref.read(pushServiceProvider).start();
       } else if (!next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
         trips.clear();
         ref.read(requestControllerProvider.notifier).reset();
+        ref.read(pushServiceProvider).stop();
       }
     });
 

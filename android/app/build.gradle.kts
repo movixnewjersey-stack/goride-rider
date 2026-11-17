@@ -1,5 +1,7 @@
 plugins {
     id("com.android.application")
+    // Firebase: lee android/app/google-services.json (no está en git)
+    id("com.google.gms.google-services")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
 }

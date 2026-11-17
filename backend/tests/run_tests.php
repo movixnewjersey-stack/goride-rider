@@ -11,7 +11,7 @@ foreach ([
     'Support/RiderException', 'Support/Geo', 'Support/QuoteToken', 'Support/TripState',
     'Services/ChbsGateway', 'Services/ChbsGatewayLive', 'Services/Settings', 'Services/ZoneGuard',
     'Services/ChbsDataBuilder', 'Services/TripReader', 'Services/QuoteService', 'Services/BookingService',
-    'Services/CancelService', 'Services/PlacesService', 'Services/RiderAuth', 'Rest/RiderController',
+    'Services/CancelService', 'Services/PlacesService', 'Services/RiderAuth', 'Services/RiderPush', 'Rest/RiderController',
 ] as $f) {
     require __DIR__ . '/../goride-rider-api/src/' . $f . '.php';
 }
@@ -255,13 +255,13 @@ echo "== Registro de rutas y aislamiento\n";
 $GLOBALS['__routes'] = [];
 $ctl->register();
 $paths = array_map(fn($r) => $r[0] . $r[1], $GLOBALS['__routes']);
-ok(count($paths) === 11, '11 rutas registradas');
+ok(count($paths) === 13, '13 rutas registradas');
 ok(count(array_unique(array_map(fn($r) => $r[0], $GLOBALS['__routes']))) === 1 && $GLOBALS['__routes'][0][0] === 'goride-rider/v1', 'solo namespace goride-rider/v1 (no toca goride/v1 ni goride/v2)');
 $src = '';
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__ . '/../goride-rider-api')) as $f) { if ($f->isFile() && str_ends_with((string) $f, '.php')) { $src .= file_get_contents((string) $f); } }
 ok(!preg_match("/update_post_meta\([^)]*_goride_(live_status|assigned_driver_id|offer_state|driver_token)/", $src), 'el plugin nunca escribe estado de viaje, asignación ni token de conductor');
 ok(!preg_match('/register_rest_route\([^;]*[\'"]goride\/v[12][\'"]/', $src), 'no registra rutas en namespaces existentes');
-ok(!str_contains($src, 'goride_dispatch') && !str_contains($src, 'FCMService') && !str_contains($src, 'goride_notify_client_status'), 'no toca despacho ni FCM de conductores');
+ok(!str_contains($src, 'goride_dispatch') && !str_contains($src, 'goride_notify_client_status') && !str_contains($src, 'goride_get_driver_fcm_token') && substr_count($src, 'FCMService())->send(') === 1, 'no toca despacho ni el token FCM del conductor (FCMService solo se invoca para avisar al pasajero)');
 ok(!preg_match('/dbDelta|CREATE TABLE|\$wpdb->(insert|update|delete|query)/', $src), 'no crea tablas ni escribe con $wpdb');
 ok(!str_contains($src, 'wp_create_nonce') && !preg_match('/get_param\([\'"]token[\'"]\)/', $src), 'no acepta token de reserva del cliente como credencial');
 
@@ -299,6 +299,53 @@ unset($_GET['currency']);
 ok($live->create(['meta' => []], [], 1) === 555, 'crear la reserva también usa la moneda base');
 ok(abs($live->bookingTotal(5) - 30.14) < 0.001, 'el total de la reserva también usa la moneda base');
 ok(!array_key_exists('currency', $_GET), 'tras crear/leer total tampoco queda moneda en $_GET');
+
+
+echo "== Avisos push al pasajero\n";
+$GLOBALS['__users'] = [7 => ['email' => 'a@x.com', 'display' => 'Ana', 'meta' => []], 8 => ['email' => 'b@x.com', 'display' => 'Beto', 'meta' => []]];
+$sent = [];
+$push = new GoRideRider\Services\RiderPush(
+    function (string $t, array $d, array $a) use (&$sent): bool { $sent[] = [$t, $d, $a]; return true; },
+    static fn(int $b): int => $b === 900 ? 7 : 0
+);
+$TOK = str_repeat('a', 30) . ':APA91b-token_1';
+throwsCode(fn() => $push->saveToken(7, 'corto', ''), 'VALIDATION_ERROR', 'token demasiado corto se rechaza');
+throwsCode(fn() => $push->saveToken(7, str_repeat('x y', 20), ''), 'VALIDATION_ERROR', 'token con caracteres inválidos se rechaza');
+$push->saveToken(7, $TOK, 'en-US');
+ok(get_user_meta(7, 'goride_rider_fcm_token', true) === $TOK && get_user_meta(7, 'goride_rider_lang', true) === 'en', 'guarda token e idioma (en)');
+$push->saveToken(8, $TOK, '');
+ok(get_user_meta(7, 'goride_rider_fcm_token', true) === '' && get_user_meta(8, 'goride_rider_fcm_token', true) === $TOK, 'el mismo teléfono pasa a la cuenta nueva y se quita de la anterior');
+$push->saveToken(7, $TOK, 'fr');
+ok(get_user_meta(7, 'goride_rider_lang', true) === 'es' && get_user_meta(8, 'goride_rider_fcm_token', true) === '', 'idioma desconocido => es; el token vuelve a la cuenta 7');
+update_user_meta(7, 'goride_rider_lang', 'es');
+ok($push->notifyStatus(900, 'accepted') === true && $sent[0][1]['type'] === 'trip_accepted' && $sent[0][2]['title'] === 'Conductor en camino' && $sent[0][2]['channel_id'] === 'goride_rider_updates', 'aviso de conductor aceptó');
+ok($push->notifyStatus(900, 'accepted') === false && count($sent) === 1, 'no se duplica el mismo aviso');
+$push->onPostMeta(1, 900, '_goride_live_status', 'arrived_at_pickup');
+ok(count($sent) === 2 && $sent[1][1]['type'] === 'trip_arrived', 'hook de estado: conductor llegó');
+$push->onPostMeta(1, 900, '_goride_live_status', 'cancelled_by_user');
+$push->onPostMeta(1, 900, 'otra_clave', 'finished');
+ok(count($sent) === 2, 'cancelado por el pasajero u otras claves no envían aviso');
+$push->onPostMeta(1, 900, '_goride_live_status', 'finished');
+ok(count($sent) === 3 && $sent[2][1]['type'] === 'trip_finished', 'hook de estado: viaje finalizado');
+$push->onChatMessage(900, 'client', 'hola', 5);
+ok(count($sent) === 3, 'mensaje del propio pasajero no genera aviso');
+$push->onChatMessage(900, 'driver', "  Ya\nestoy   afuera  ", 6);
+ok(count($sent) === 4 && $sent[3][1]['type'] === 'chat_message' && $sent[3][2]['body'] === 'Ya estoy afuera' && $sent[3][1]['message_id'] === '6', 'mensaje del conductor: texto limpio y id');
+$push->onChatMessage(900, 'driver', str_repeat('é', 300), 7);
+ok(mb_strlen($sent[4][2]['body']) === 120, 'el texto del aviso se recorta a 120 caracteres');
+ok($push->notifyStatus(901, 'accepted') === false && $push->notifyChat(901, 'hola', 1) === false, 'sin pasajero resoluble no se envía nada');
+$push->clearToken(7);
+ok($push->notifyChat(900, 'hola', 8) === false, 'sin token no se envía');
+$boom = new GoRideRider\Services\RiderPush(function () { throw new RuntimeException('fcm caído'); }, static fn(int $b): int => 7);
+$boom->saveToken(7, $TOK, 'es');
+ok($boom->notifyChat(900, 'hola', 9) === false, 'si el envío falla no lanza excepción');
+ok(GoRideRider\Services\RiderPush::text('trip_finished', 'en')[0] === 'Trip finished', 'textos en inglés');
+// FCMService real (archivo a subir): sin alerta Android el mensaje NO cambia; con alerta añade android.notification
+eval('namespace GoRide\Api\Services { ' . preg_replace('/^<\?php\s*declare\(strict_types=1\);\s*namespace [^;]+;/s', '', file_get_contents('/mnt/user-data/outputs/rider_push/FCMService.php')) . ' }');
+$base = GoRide\Api\Services\FCMService::buildMessage('tok', ['type' => 'x']);
+ok(!isset($base['message']['android']['notification']) && $base['message']['android']['priority'] === 'high', 'FCMService: sin alerta Android el mensaje del conductor no cambia');
+$withAlert = GoRide\Api\Services\FCMService::buildMessage('tok', ['type' => 'x'], null, ['title' => 'T', 'body' => 'B', 'channel_id' => 'c1']);
+ok($withAlert['message']['android']['notification'] === ['title' => 'T', 'body' => 'B', 'sound' => 'default', 'channel_id' => 'c1'] && $withAlert['message']['apns']['headers']['apns-push-type'] === 'background', 'FCMService: con alerta Android añade notification y no toca iOS');
 
 echo "\n$pass pruebas correctas, $fail fallidas\n";
 exit($fail === 0 ? 0 : 1);

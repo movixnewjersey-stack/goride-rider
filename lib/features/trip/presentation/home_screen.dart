@@ -152,6 +152,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _signOut() async {
     ref.read(activeTripControllerProvider.notifier).clear();
     ref.read(requestControllerProvider.notifier).reset();
+    // Antes de borrar la sesión: quita este teléfono de los avisos de esta cuenta.
+    await ref.read(pushServiceProvider).stop(unregister: true);
     await ref.read(sessionControllerProvider.notifier).signOut();
   }
 

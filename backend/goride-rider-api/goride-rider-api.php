@@ -24,13 +24,47 @@ foreach ([
     'Support/RiderException', 'Support/Geo', 'Support/QuoteToken', 'Support/TripState',
     'Services/ChbsGateway', 'Services/ChbsGatewayLive', 'Services/Settings', 'Services/ZoneGuard',
     'Services/ChbsDataBuilder', 'Services/TripReader', 'Services/QuoteService', 'Services/BookingService',
-    'Services/CancelService', 'Services/PlacesService', 'Services/RiderAuth', 'Rest/RiderController',
+    'Services/CancelService', 'Services/PlacesService', 'Services/RiderAuth', 'Services/RiderPush', 'Rest/RiderController',
 ] as $goride_rider_file) {
     require_once __DIR__ . '/src/' . $goride_rider_file . '.php';
 }
 unset($goride_rider_file);
 
-add_action('rest_api_init', static function (): void {
+/**
+ * Avisos push al pasajero. Se engancha a eventos que YA existen (cambio de
+ * _goride_live_status y, si goride-live lo emite, goride_chat_message_inserted).
+ * No modifica ninguna lógica existente; si algo falla, solo se registra.
+ */
+$goride_rider_push = static function (): \GoRideRider\Services\RiderPush {
+    static $instance = null;
+    if ($instance === null) {
+        $instance = new \GoRideRider\Services\RiderPush(
+            static function (string $token, array $data, array $alert): bool {
+                if (!class_exists('\\GoRide\\Api\\Services\\FCMService')) {
+                    return false;
+                }
+
+                return (new \GoRide\Api\Services\FCMService())->send($token, $data, null, $alert);
+            },
+            static fn(int $bookingId): int => function_exists('goride_get_booking_user_id') ? (int) goride_get_booking_user_id($bookingId) : 0
+        );
+    }
+
+    return $instance;
+};
+foreach (['added_post_meta', 'updated_post_meta'] as $goride_rider_hook) {
+    add_action($goride_rider_hook, static function ($metaId, $postId, $metaKey, $value) use ($goride_rider_push): void {
+        if ($metaKey === '_goride_live_status' && get_post_type((int) $postId) === 'chbs_booking') {
+            $goride_rider_push()->onPostMeta($metaId, $postId, $metaKey, $value);
+        }
+    }, 10, 4);
+}
+unset($goride_rider_hook);
+add_action('goride_chat_message_inserted', static function ($bookingId, $sender, $message, $messageId = 0) use ($goride_rider_push): void {
+    $goride_rider_push()->onChatMessage($bookingId, $sender, $message, $messageId);
+}, 10, 4);
+
+add_action('rest_api_init', static function () use ($goride_rider_push): void {
     $settings = new \GoRideRider\Services\Settings();
     $chbs = new \GoRideRider\Services\ChbsGatewayLive();
     $tokens = new \GoRideRider\Support\QuoteToken($settings->secret(), $settings->quoteTtlSeconds());
@@ -88,6 +122,7 @@ add_action('rest_api_init', static function (): void {
             static fn(): string => class_exists('CHBSOption') ? (string) \CHBSOption::getOption('google_map_api_key') : '',
             $chbs,
             $settings
-        )
+        ),
+        $goride_rider_push()
     ))->register();
 });
