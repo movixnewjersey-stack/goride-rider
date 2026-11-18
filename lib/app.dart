@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/providers.dart';
+import 'core/push/push_notice.dart';
 import 'core/session/session_controller.dart';
 import 'core/theme/app_theme.dart';
 import 'features/trip/application/trip_providers.dart';
@@ -40,6 +41,7 @@ class _GoRideAppState extends ConsumerState<GoRideApp> with WidgetsBindingObserv
       // Al volver a primer plano el servidor manda: se vuelve a consultar el viaje.
       trips.recover();
       trips.resumePolling();
+      ref.read(pushServiceProvider).retryIfNeeded();
     } else if (state == AppLifecycleState.paused) {
       trips.pausePolling();
     }
@@ -61,6 +63,7 @@ class _GoRideAppState extends ConsumerState<GoRideApp> with WidgetsBindingObserv
 
     return MaterialApp.router(
       title: 'GoRide',
+      scaffoldMessengerKey: rootMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: ref.watch(routerProvider),

@@ -6,12 +6,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goride_rider_app/core/api/api_client.dart';
 import 'package:goride_rider_app/core/push/push_gateway.dart';
+import 'package:goride_rider_app/core/push/push_notice.dart';
 import 'package:goride_rider_app/core/push/push_service.dart';
 
 class _Adapter implements HttpClientAdapter {
   _Adapter({this.status = 200});
 
-  final int status;
+  int status;
   final List<RequestOptions> requests = <RequestOptions>[];
 
   @override
@@ -35,7 +36,7 @@ class _FakeGateway implements PushGateway {
   bool permissionAsked = false;
   bool deleted = false;
   final StreamController<String> refresh = StreamController<String>.broadcast();
-  final StreamController<void> foreground = StreamController<void>.broadcast();
+  final StreamController<PushNotice> foreground = StreamController<PushNotice>.broadcast();
 
   @override
   Future<bool> requestPermission() async {
@@ -50,13 +51,13 @@ class _FakeGateway implements PushGateway {
   Stream<String> get tokenRefresh => refresh.stream;
 
   @override
-  Stream<void> get foregroundMessages => foreground.stream;
+  Stream<PushNotice> get foregroundMessages => foreground.stream;
 
   @override
   Future<void> deleteToken() async => deleted = true;
 }
 
-PushService _service(_Adapter a, _FakeGateway g, {void Function()? onForeground, String lang = 'es'}) {
+PushService _service(_Adapter a, _FakeGateway g, {void Function(PushNotice)? onForeground, String lang = 'es'}) {
   final dio = Dio(BaseOptions(baseUrl: 'https://example.test/wp-json'))..httpClientAdapter = a;
   return PushService(
     gateway: g,
@@ -122,13 +123,13 @@ void main() {
   test('un aviso con la app abierta ejecuta el callback', () async {
     var n = 0;
     final g = _FakeGateway();
-    final s = _service(_Adapter(), g, onForeground: () => n++);
+    final s = _service(_Adapter(), g, onForeground: (_) => n++);
     await s.start();
-    g.foreground.add(null);
+    g.foreground.add(const PushNotice(title: 't', body: 'b'));
     await _tick();
     expect(n, 1);
     await s.stop();
-    g.foreground.add(null);
+    g.foreground.add(const PushNotice(title: 't', body: 'b'));
     await _tick();
     expect(n, 1, reason: 'tras stop() ya no escucha');
   });
@@ -153,5 +154,18 @@ void main() {
     await s.stop();
     expect(a.requests.length, before);
     expect(g.deleted, false);
+  });
+
+  test('si el registro falla, retryIfNeeded lo reintenta; una vez registrado no repite', () async {
+    final a = _Adapter(status: 500);
+    final s = _service(a, _FakeGateway());
+    await s.start();
+    expect(a.requests, hasLength(1));
+    a.status = 200;
+    await s.retryIfNeeded();
+    expect(a.requests, hasLength(2), reason: 'reintentó tras el fallo');
+    await s.retryIfNeeded();
+    expect(a.requests, hasLength(2), reason: 'ya registrado: no repite');
+    await s.stop();
   });
 }

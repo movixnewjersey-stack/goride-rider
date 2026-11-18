@@ -45,9 +45,11 @@ class ApiClient {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
     bool auth = true,
+    bool expireSessionOn401 = true,
   }) {
     // El servidor (Mod_Security) exige Content-Type JSON con cuerpo explícito.
-    return _send('POST', path, body: body ?? <String, dynamic>{}, headers: headers, auth: auth);
+    return _send('POST', path,
+        body: body ?? <String, dynamic>{}, headers: headers, auth: auth, expireSessionOn401: expireSessionOn401);
   }
 
   Future<Map<String, dynamic>> _send(
@@ -57,6 +59,7 @@ class ApiClient {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
     required bool auth,
+    bool expireSessionOn401 = true,
   }) async {
     final token = auth ? readToken() : null;
     if (auth && (token == null || token.isEmpty)) {
@@ -89,10 +92,10 @@ class ApiClient {
       throw _mapDio(e, isWrite: method != 'GET');
     }
 
-    return _parse(response, auth: auth);
+    return _parse(response, auth: auth, expireSessionOn401: expireSessionOn401);
   }
 
-  Map<String, dynamic> _parse(Response<dynamic> response, {required bool auth}) {
+  Map<String, dynamic> _parse(Response<dynamic> response, {required bool auth, bool expireSessionOn401 = true}) {
     final status = response.statusCode ?? 0;
     final raw = response.data;
 
@@ -122,7 +125,7 @@ class ApiClient {
       data: data.isEmpty ? null : data,
     );
 
-    if (status == 401 && auth) {
+    if (status == 401 && auth && expireSessionOn401) {
       onUnauthorized?.call();
     }
 

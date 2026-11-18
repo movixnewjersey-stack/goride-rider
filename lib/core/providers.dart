@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/auth/data/account_repository.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/chat/data/chat_repository.dart';
 import '../features/places/data/places_repository.dart';
@@ -10,6 +11,7 @@ import '../features/trip/application/trip_providers.dart';
 import 'api/api_client.dart';
 import 'location/location_service.dart';
 import 'push/push_gateway.dart';
+import 'push/push_notice.dart';
 import 'push/push_service.dart';
 import 'session/session_controller.dart';
 import 'storage/session_storage.dart';
@@ -29,6 +31,8 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) => ApiAuthRepository(ref.watch(apiClientProvider)));
 
+final accountRepositoryProvider = Provider<AccountRepository>((ref) => ApiAccountRepository(ref.watch(apiClientProvider)));
+
 final tripRepositoryProvider = Provider<TripRepository>((ref) => ApiTripRepository(ref.watch(apiClientProvider)));
 
 final placesRepositoryProvider =
@@ -46,7 +50,10 @@ final pushServiceProvider = Provider<PushService>((ref) {
     api: ref.watch(apiClientProvider),
     language: () => ui.PlatformDispatcher.instance.locale.languageCode,
     // Con la app abierta, un aviso del servidor adelanta la consulta del viaje.
-    onForegroundMessage: () => ref.read(activeTripControllerProvider.notifier).recover(),
+    onForegroundMessage: (notice) {
+      ref.read(activeTripControllerProvider.notifier).recover();
+      showPushNotice(notice);
+    },
   );
   ref.onDispose(() => service.stop());
   return service;

@@ -64,6 +64,17 @@ add_action('goride_chat_message_inserted', static function ($bookingId, $sender,
     $goride_rider_push()->onChatMessage($bookingId, $sender, $message, $messageId);
 }, 10, 4);
 
+// Cuenta eliminada (plugin goride-account-deletion): se retira el token de avisos de esa cuenta.
+foreach (['added_user_meta', 'updated_user_meta'] as $goride_rider_hook) {
+    add_action($goride_rider_hook, static function ($metaId, $userId, $metaKey): void {
+        if ($metaKey === 'goride_account_deleted_at') {
+            delete_user_meta((int) $userId, \GoRideRider\Services\RiderPush::META_TOKEN);
+            delete_user_meta((int) $userId, \GoRideRider\Services\RiderPush::META_LANG);
+        }
+    }, 10, 3);
+}
+unset($goride_rider_hook);
+
 add_action('rest_api_init', static function () use ($goride_rider_push): void {
     $settings = new \GoRideRider\Services\Settings();
     $chbs = new \GoRideRider\Services\ChbsGatewayLive();

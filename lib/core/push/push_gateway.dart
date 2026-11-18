@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import 'push_notice.dart';
+
 /// Acceso a Firebase Cloud Messaging, aislado para poder probar el resto sin Firebase.
 abstract class PushGateway {
   /// Pide permiso de notificaciones (Android 13+). Devuelve si fue concedido.
@@ -15,7 +17,7 @@ abstract class PushGateway {
   Stream<String> get tokenRefresh;
 
   /// Un aviso llegó con la app abierta.
-  Stream<void> get foregroundMessages;
+  Stream<PushNotice> get foregroundMessages;
 
   /// Invalida el token de este teléfono (al cerrar sesión).
   Future<void> deleteToken();
@@ -56,7 +58,11 @@ class FirebasePushGateway implements PushGateway {
   Stream<String> get tokenRefresh => _ready ? FirebaseMessaging.instance.onTokenRefresh : const Stream<String>.empty();
 
   @override
-  Stream<void> get foregroundMessages => _ready ? FirebaseMessaging.onMessage.map((_) {}) : const Stream<void>.empty();
+  Stream<PushNotice> get foregroundMessages => _ready
+      ? FirebaseMessaging.onMessage.map(
+          (m) => PushNotice(title: m.notification?.title ?? '', body: m.notification?.body ?? ''),
+        )
+      : const Stream<PushNotice>.empty();
 
   @override
   Future<void> deleteToken() async {

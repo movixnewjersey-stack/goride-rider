@@ -8,6 +8,7 @@ import '../../../core/api/api_exception.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/providers.dart';
+import '../../auth/presentation/delete_account_screen.dart';
 import '../../places/presentation/place_search_screen.dart';
 import '../application/request_controller.dart';
 import '../application/trip_providers.dart';
@@ -173,7 +174,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
 
     final start = LatLng(_biasLat ?? AppConfig.defaultLat, _biasLng ?? AppConfig.defaultLng);
-    final maxPassengers = config.valueOrNull?.maxPassengers ?? 4;
     final serviceDown = config.valueOrNull != null && !config.valueOrNull!.ready;
 
     return Scaffold(
@@ -201,10 +201,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onSelected: (v) {
                     if (v == 'logout') {
                       _signOut();
+                    } else if (v == 'delete') {
+                      Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => const DeleteAccountScreen()));
                     }
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem<String>(value: 'logout', child: Text('Cerrar sesión')),
+                    PopupMenuItem<String>(value: 'delete', child: Text('Eliminar mi cuenta')),
                   ],
                 ),
               ),
@@ -214,7 +217,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             alignment: Alignment.bottomCenter,
             child: _Panel(
               state: s,
-              maxPassengers: maxPassengers,
               serviceDown: serviceDown,
               recoverError: active.recoverError,
               locationNotice: _locationNotice,
@@ -235,7 +237,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class _Panel extends ConsumerWidget {
   const _Panel({
     required this.state,
-    required this.maxPassengers,
     required this.serviceDown,
     required this.recoverError,
     required this.locationNotice,
@@ -248,7 +249,6 @@ class _Panel extends ConsumerWidget {
   });
 
   final RequestState state;
-  final int maxPassengers;
   final bool serviceDown;
   final String? recoverError;
   final String? locationNotice;
@@ -318,26 +318,6 @@ class _Panel extends ConsumerWidget {
                 onTap: onPickDropoff,
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.group_outlined),
-                  const SizedBox(width: 8),
-                  const Text('Pasajeros'),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Menos pasajeros',
-                    onPressed: state.passengers > 1 ? () => controller.setPassengers(state.passengers - 1) : null,
-                    icon: const Icon(Icons.remove_circle_outline),
-                  ),
-                  Text('${state.passengers}', key: const Key('passengers_value')),
-                  IconButton(
-                    tooltip: 'Más pasajeros',
-                    onPressed:
-                        state.passengers < maxPassengers ? () => controller.setPassengers(state.passengers + 1) : null,
-                    icon: const Icon(Icons.add_circle_outline),
-                  ),
-                ],
-              ),
               if (state.quoteStatus == QuoteStatus.loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
