@@ -112,8 +112,8 @@ void main() {
     final s = _service(a, g);
     await s.start();
     g.refresh.add('tok-2');
-    await _tick();
-    await _tick();
+    // La petición HTTP simulada termina en otra vuelta del bucle de eventos.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(a.requests, hasLength(2));
     expect(a.requests.last.data['token'], 'tok-2');
     await s.stop();
